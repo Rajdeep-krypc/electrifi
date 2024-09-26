@@ -195,7 +195,16 @@ contract SmartGridManagement is Ownable {
 // Original license: SPDX_License_Identifier: MIT
 pragma solidity ^0.8.0;
 
+interface IEnergyToken{
+    function mint(address to, uint256 amount) external;
+}
+
 contract SmartMeterManagement is SmartGridManagement {
+
+    IEnergyToken public energyToken;
+
+    uint256 tokensPerKWh;
+
     struct SmartMeter {
         string meterId;
         uint startConsumptionTime;
@@ -205,10 +214,22 @@ contract SmartMeterManagement is SmartGridManagement {
 
     mapping(address => SmartMeter) public smartMeters;
 
+    event setEnergyToken(IEnergyToken indexed energyTokencontract);
     event SmartMeterRegistered(address indexed smartMeterAddress, string meterId);
     event SmartMeterReadingSent(address indexed smartMeterAddress, uint indexed startConsumptionTime, uint indexed lastConsumptionTime, uint unitConsumed);
    
-    constructor(uint _timeInSecond) SmartGridManagement(_timeInSecond) {}
+    constructor(uint _timeInSecond, uint _tokensPerKWh) SmartGridManagement(_timeInSecond) {
+        setEnergyTokensPerKWh(_tokensPerKWh);
+    }
+
+    function setEnergyERC20Token(IEnergyToken _energyToken) public onlyOwner{
+        energyToken = _energyToken;
+        emit setEnergyToken(_energyToken);
+    }
+
+    function setEnergyTokensPerKWh(uint256 _tokensPerKWh) public onlyOwner{
+        tokensPerKWh = _tokensPerKWh;
+    }
 
     function registerSmartMeter(address _smartMeterAddress, string memory _meterId) external onlyOwner {
         require(bytes(_meterId).length > 0, "Meter ID cannot be empty");
@@ -241,6 +262,10 @@ contract SmartMeterManagement is SmartGridManagement {
         sm.unitConsumed += _unitConsumed;
         totalElectricityAvailable -= _unitConsumed;
 
+        uint tokensToMint = calculateTokens(_unitConsumed);
+
+        energyToken.mint(_smartMeterAddress, tokensToMint);
+
         emit SmartMeterReadingSent(_smartMeterAddress, _startConsumptionTime, _lastConsumptionTime, _unitConsumed);
     }
 
@@ -260,6 +285,14 @@ contract SmartMeterManagement is SmartGridManagement {
         sm.lastConsumptionTime = _lastConsumptionTime;
         totalElectricityAvailable -= _unitConsumed;
 
+        uint tokensToMint = calculateTokens(_unitConsumed);
+
+        energyToken.mint(_smartMeterAddress, tokensToMint);
+
         emit SmartMeterReadingSent(_smartMeterAddress, _startConsumptionTime, _lastConsumptionTime, _unitConsumed);
+    }
+
+    function calculateTokens(uint256 _energyUsedInKWh) public view returns(uint256 tokensToMint){
+        tokensToMint = _energyUsedInKWh * tokensPerKWh;
     }
 }
